@@ -3,13 +3,15 @@ import pickle
 import threading
 import asyncio
 import argparse
+import os
 
 from config import OPCODES, Colors
 
 class UDPServer:
-    def __init__(self, host='127.0.0.1', port=5555):
+    def __init__(self, host='0.0.0.0', port=None):
         self.server = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.server.bind((host, port))
+        self.port = port if port else int(os.environ.get('PORT', 5555))
+        self.server.bind((host, self.port))
         self.server.setblocking(False)  # Importante para usar con asyncio
         self.clients = {}
         self.running = True
