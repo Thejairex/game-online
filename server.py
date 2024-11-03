@@ -6,7 +6,7 @@ import asyncio
 from config import OPCODES
 
 class UDPServer:
-    def __init__(self, host='127.0.0.1', port=5555):
+    def __init__(self, host='192.168.1.5', port=5555):
         self.server = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.server.bind((host, port))
         self.server.setblocking(False)  # Importante para usar con asyncio
@@ -15,6 +15,7 @@ class UDPServer:
 
     async def handle_client(self):
         print("Server is running...")
+        print("ip:", self.server.getsockname()[0], "port:", self.server.getsockname()[1])
         while self.running:
             try:
                 # Recibe datos sin bloquear con asyncio
