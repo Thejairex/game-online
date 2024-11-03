@@ -2,6 +2,7 @@ import socket
 import pickle
 import threading
 import asyncio
+import argparse
 
 from config import OPCODES, Colors
 
@@ -99,5 +100,9 @@ class UDPServer:
         await self.handle_client()
 
 if __name__ == '__main__':
-    server = UDPServer()
+    parser = argparse.ArgumentParser(description="Ejemplo de script con argumentos")
+    parser.add_argument('--host', type=str, default='127.0.0.1', help="Direccion IP del servidor")
+    parser.add_argument('--port', type=int, default=5555, help="Puerto del servidor")
+    args = parser.parse_args()
+    server = UDPServer(args.host, args.port)
     asyncio.run(server.run())
