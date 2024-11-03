@@ -3,10 +3,10 @@ import pickle
 import threading
 import asyncio
 
-from config import OPCODES
+from config import OPCODES, Colors
 
 class UDPServer:
-    def __init__(self, host='192.168.1.5', port=5555):
+    def __init__(self, host='127.0.0.1', port=5555):
         self.server = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.server.bind((host, port))
         self.server.setblocking(False)  # Importante para usar con asyncio
@@ -31,19 +31,63 @@ class UDPServer:
                 if not data:
                     continue
 
-                data = pickle.loads(data)
+                # Intenta deserializar los datos
+                try:
+                    data = pickle.loads(data)
+                    print("Received data:", data)
+                except Exception as e:
+                    print("Failed to deserialize data:", e)
+                    continue  # Ignora y pasa al siguiente ciclo si falla
 
-                print(data)
-                if data["operation"] == OPCODES.CONNECT:
+                # print(data)
+                if data.get("operation") == OPCODES.CONNECT:
                     self.clients[addr]["player"] = data["player"]
-
-                    # Envía el índice al cliente
                     index = list(self.clients.keys()).index(addr)
-                    await asyncio.get_event_loop().sock_sendto(self.server, pickle.dumps(index), addr)
+                    color = [Colors.GREEN, Colors.BLUE, Colors.YELLOW, Colors.PURPLE][index%4]
+                    
+                    self.clients[addr]["color"] = color
+                    # Envía el índice al cliente
+                    players_data = [
+                        {
+                            "index": list(self.clients.keys()).index(client_addr),
+                            "color": client_data["color"],
+                        }
+                        for client_addr, client_data in self.clients.items()
+                    ]
 
-                elif data["operation"] == OPCODES.DISCONNECT:
+                    response = {
+                        "operation": OPCODES.CONNECT,
+                        "player": index,
+                        "players": players_data
+                    }
+                    
+                    # await asyncio.get_event_loop().sock_sendto(self.server, pickle.dumps(response), addr)
+                    for client in self.clients:
+                        await asyncio.get_event_loop().sock_sendto(self.server, pickle.dumps(response), client)
+
+                elif data.get("operation") == OPCODES.DISCONNECT:
                     print(f"Client disconnected: {addr}")
                     del self.clients[addr]
+                
+                elif data["operation"] == OPCODES.MOVE:
+                    self.clients[addr]["player"] = data["player"]
+                    self.clients[addr]["x"] = data["x"]
+                    self.clients[addr]["y"] = data["y"]
+
+                    # Enviará los datos al cliente con la ubicación actualizada menos la direccion del cliente
+                    response = {
+                        "operation": OPCODES.MOVE,
+                        "player": data["player"],
+                        "x": data["x"],
+                        "y": data["y"],
+                    }
+                    
+                    for client in self.clients:
+                        if client != addr:
+                            await asyncio.get_event_loop().sock_sendto(self.server, pickle.dumps(response), client)
+                            
+            except BlockingIOError:
+                await asyncio.sleep(0.01)
                 
             except Exception as e:
                 print("Error:", e)

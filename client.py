@@ -16,7 +16,7 @@ class Client:
             data = pickle.dumps(data)
             await asyncio.get_event_loop().sock_sendall(self.client, data)
         except Exception as e:
-            print("Error en envío:", e)
+            print("Error en envío (code 1):", e)
             self.running = False
             self.close()
 
@@ -24,22 +24,28 @@ class Client:
         data = {
             "operation": OPCODES.DISCONNECT,
         }
-        await self.send(data  # Asegúrate de enviar la desconexión
+        await self.send(data)  # Asegúrate de enviar la desconexión
         self.close()
 
     async def receive(self, queue):  # Acepta la cola como argumento
         while self.running:
             try:
-                data = self.client.recv(1024)
+                data = await asyncio.get_event_loop().sock_recv(self.client, 1024)
                 if data:
                     data = pickle.loads(data)
-                    await queue.put(data)  # Poner el resultado en la cola
+                    await queue.put(data)  
             except BlockingIOError:
                 await asyncio.sleep(0.01)
+                
+            except ConnectionResetError:
+                print("Se ha perdido la conexión con el servidor")
+                self.close()
             except Exception as e:
-                print(e)
-                break
+                print("Error en envío (code 2):", e)
+                self.running = False
+                self.close()
 
     def close(self):
         self.client.close()
+        print("Cerrando cliente...")
         self.running = False
