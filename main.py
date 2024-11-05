@@ -1,17 +1,19 @@
 import pygame as pg
 
-from player import Player
+from src.entities.player import Player
+
 from config import *
 from client import Client
 import asyncio
-
-import pickle
 
 from config import OPCODES
 
 class Game:
     def __init__(self):
         pg.init()
+        """"
+        Iniciador de la clase.
+        """
         self.screen = pg.display.set_mode((800, 600))
         self.players = {
             0: Player(0, 0, 50),
@@ -31,6 +33,9 @@ class Game:
         self.events_task = []
 
     async def run(self):
+        """
+        Ejecuta todos los metodos del juego hasta su cierre.
+        """
         while self.running:
             await self.events()
             await self.process_queue()
@@ -39,37 +44,44 @@ class Game:
             await asyncio.sleep(0.01)  # Evita el uso intensivo de CPU
 
     async def events(self):
+        """
+        Controla lo que hace el jugador en el juego.
+        """
         for event in pg.event.get():
             if event.type == pg.QUIT:
                 await self.client.disconnect()
                 self.running = False
 
         keys = pg.key.get_pressed()
+        
+        # Conectarse al servidor.
         if keys[pg.K_ESCAPE]:
             if not self.connected:
-
                 await self.client.send({"operation": OPCODES.CONNECT, "player": (0, 0)})
                 asyncio.create_task(self.client.receive(self.queue))  # Pasa la cola a la tarea
                 self.connected = True
-                
+        
+        # Offline
+        if keys[pg.K_SPACE] and not self.connected:
+            self.player = 0
+            self.players[self.player].color = Colors.GREEN
+            self.connected = True
+        
         if self.player is not None:
             self.players[self.player].move(keys)
                 
     async def process_queue(self):
+        """
+        Procesa las respuestas del servidor del multijugador.
+        """
         while not self.queue.empty():
             data = await self.queue.get() # retorna el pickle
-            # print("""Result: """, result)
-            print(data)
             if data["operation"] == OPCODES.CONNECT:
                 if self.player is None:
                     self.player = data["player"]
                 for player_data in data["players"]:
                     index = player_data["index"]
                     color = player_data["color"]
-                    
-                    # Asegúrate de que el jugador esté en la lista `self.players`
-                    
-                    # Actualiza la posición y el color del jugador
                     self.players[index].color = color
                 
             elif data["operation"] == OPCODES.MOVE:
@@ -78,7 +90,9 @@ class Game:
                 
 
     async def update(self):
-        
+        """
+        Actualiza el estado del juego.
+        """
         if self.player is not None:
             if self.players[self.player].last_action == "move":
                 self.players[self.player].last_action = None
@@ -88,6 +102,10 @@ class Game:
         self.clock.tick(self.fps)
 
     def draw(self):
+        """
+        Dibuja el estado del juego.
+        """
+        
         self.screen.fill(Colors.BLACK)
 
         for player in self.players.values():
