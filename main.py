@@ -101,7 +101,7 @@ class Game:
                 
             elif data["operation"] == OPCODES.MOVE:
                 """
-                Gets the movement of the player from the server
+                Gets the movement of the players from the server
                 """
                 player, x, y = data["player"], data["x"], data["y"]
                 self.players[player].x, self.players[player].y = x, y
