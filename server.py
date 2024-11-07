@@ -1,6 +1,5 @@
 import socket
 import pickle
-import threading
 import asyncio
 import argparse
 import os
@@ -8,22 +7,36 @@ import os
 from config import OPCODES, Colors
 
 class UDPServer:
+    """
+    Class to handle the server UDP socket and clients connections.
+
+    args:
+        host (str): IP address of the server
+        port (int): Port of the server
+    """
     def __init__(self, host='0.0.0.0', port=None):
+        """
+        Initializes the server socket and starts the connection
+        """
         self.server = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        # Get the port from the environment variable
         self.port = port if port else int(os.environ.get('PORT', 5555))
         self.server.bind((host, self.port))
-        self.server.setblocking(False)  # Importante para usar con asyncio
         self.clients = {}
         self.running = True
+        
+        # set the socket to non-blocking mode
+        self.server.setblocking(False)
 
     async def handle_client(self):
         print("Server is running...")
         print("ip:", self.server.getsockname()[0], "port:", self.server.getsockname()[1])
         while self.running:
             try:
-                # Recibe datos sin bloquear con asyncio
+                # receive data from the client with pickle and asyncio
                 data, addr = await asyncio.get_event_loop().sock_recvfrom(self.server, 1024)
 
+                # Checks if the client is new
                 if addr not in self.clients:
                     self.clients[addr] = {
                         "addr": addr,
@@ -31,25 +44,27 @@ class UDPServer:
                     }
                     print(f"New client: {addr}")
 
+                # Checks if the data is empty
                 if not data:
                     continue
 
-                # Intenta deserializar los datos
+                # Try to decode the data
                 try:
                     data = pickle.loads(data)
-                    print("Received data:", data)
                 except Exception as e:
-                    print("Failed to deserialize data:", e)
-                    continue  # Ignora y pasa al siguiente ciclo si falla
+                    continue  # Ignore invalid data
 
-                # print(data)
+                # Process the data starting with the operation
                 if data.get("operation") == OPCODES.CONNECT:
+                    """Connects the client to the server and sends the player index and color to the client."""
+                    
+                    # Set the player index and color for the client
                     self.clients[addr]["player"] = data["player"]
                     index = list(self.clients.keys()).index(addr)
                     color = [Colors.GREEN, Colors.BLUE, Colors.YELLOW, Colors.PURPLE][index%4]
-                    
                     self.clients[addr]["color"] = color
-                    # Envía el índice al cliente
+
+                    # Send the player index and color to the client and all the other clients
                     players_data = [
                         {
                             "index": list(self.clients.keys()).index(client_addr),
@@ -58,26 +73,31 @@ class UDPServer:
                         for client_addr, client_data in self.clients.items()
                     ]
 
+                    # Generate the response with the player index and color
                     response = {
                         "operation": OPCODES.CONNECT,
                         "player": index,
                         "players": players_data
                     }
                     
-                    # await asyncio.get_event_loop().sock_sendto(self.server, pickle.dumps(response), addr)
+                    # Send the response to all the clients
                     for client in self.clients:
                         await asyncio.get_event_loop().sock_sendto(self.server, pickle.dumps(response), client)
 
+
                 elif data.get("operation") == OPCODES.DISCONNECT:
+                    """Disconnects the client from the server."""
                     print(f"Client disconnected: {addr}")
                     del self.clients[addr]
                 
                 elif data["operation"] == OPCODES.MOVE:
+                    """Updates the player location."""
+                    # Get the player index and location
                     self.clients[addr]["player"] = data["player"]
                     self.clients[addr]["x"] = data["x"]
                     self.clients[addr]["y"] = data["y"]
 
-                    # Enviará los datos al cliente con la ubicación actualizada menos la direccion del cliente
+                    # Send the player location to all the other clients
                     response = {
                         "operation": OPCODES.MOVE,
                         "player": data["player"],
@@ -85,26 +105,38 @@ class UDPServer:
                         "y": data["y"],
                     }
                     
+                    # Send the response to all the clients except the sender
                     for client in self.clients:
                         if client != addr:
                             await asyncio.get_event_loop().sock_sendto(self.server, pickle.dumps(response), client)
-                            
+            
+            # If there is no data, sleep for 0.01 seconds
             except BlockingIOError:
                 await asyncio.sleep(0.01)
-                
+            
+            # If there is an error, print it
             except Exception as e:
                 print("Error:", e)
 
     def close(self):
+        """
+        Closes the server socket.
+        """
         self.server.close()
+        self.running = False
 
     async def run(self):
+        """
+        Runs the server.
+        """
         await self.handle_client()
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description="Ejemplo de script con argumentos")
-    parser.add_argument('--host', type=str, default='127.0.0.1', help="Direccion IP del servidor")
-    parser.add_argument('--port', type=int, default=5555, help="Puerto del servidor")
+    parser = argparse.ArgumentParser(description="Example: python server.py --host 127.0.0.1 --port 5555")
+    parser.add_argument('--host', type=str, default='127.0.0.1', help="Host IP the server")
+    parser.add_argument('--port', type=int, default=5555, help="Port of the server")
     args = parser.parse_args()
+    
+    # Start the server
     server = UDPServer(args.host, args.port)
     asyncio.run(server.run())
